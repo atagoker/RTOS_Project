@@ -1,43 +1,39 @@
-#include <stdio.h>
-#include <pthread.h>
+#include <stdio.h>    // standard input/output
+#include <pthread.h>  // posix threads library
 
-#define NUM_THREADS 16
-#define ITERATIONS  1000
+#define NUM_THREADS 16   // number of threads to create
+#define ITERATIONS  1000 // how many times each thread adds the value
 
-/* Shared global variable protected by mutex */
-long global_value = 0;
-int user_value = 0;
-pthread_mutex_t mutex;
+long global_value = 0;      // shared variable protected by mutex
+int user_value = 0;         // value entered by the user
+pthread_mutex_t mutex;      // mutex to protect shared variable
 
-void *add_value(void *arg) {
-    for (int i = 0; i < ITERATIONS; i++) {
-        pthread_mutex_lock(&mutex);
-        global_value += user_value;  /* Protected critical section */
-        pthread_mutex_unlock(&mutex);
+void *add_value(void *arg) {                // thread function
+    for (int i = 0; i < ITERATIONS; i++) { // loop 1000 times
+        pthread_mutex_lock(&mutex);         // lock mutex before accessing shared variable
+        global_value += user_value;         // safely add value to shared variable
+        pthread_mutex_unlock(&mutex);       // unlock mutex after update
     }
-    return NULL;
+    return NULL;                            // thread returns nothing
 }
 
 int main() {
-    pthread_t threads[NUM_THREADS];
+    pthread_t threads[NUM_THREADS];         // array to store thread ids
 
-    pthread_mutex_init(&mutex, NULL);
+    pthread_mutex_init(&mutex, NULL);       // initialize the mutex
 
-    printf("Enter value to add: ");
-    scanf("%d", &user_value);
+    printf("Enter value to add: ");         // prompt user for input
+    scanf("%d", &user_value);               // read user input
 
-    /* Create 16 threads */
-    for (int i = 0; i < NUM_THREADS; i++) {
-        pthread_create(&threads[i], NULL, add_value, NULL);
+    for (int i = 0; i < NUM_THREADS; i++) {               // loop to create threads
+        pthread_create(&threads[i], NULL, add_value, NULL); // create each thread
     }
 
-    /* Wait for all threads to finish */
-    for (int i = 0; i < NUM_THREADS; i++) {
-        pthread_join(threads[i], NULL);
+    for (int i = 0; i < NUM_THREADS; i++) { // loop to wait for threads
+        pthread_join(threads[i], NULL);      // wait for each thread to finish
     }
 
-    printf("Current value is %ld\n", global_value);
-
-    pthread_mutex_destroy(&mutex);
-    return 0;
+    printf("Current value is %ld\n", global_value); // print final result
+    pthread_mutex_destroy(&mutex);                   // clean up mutex
+    return 0;                                        // exit program
 }
