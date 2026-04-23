@@ -1,36 +1,33 @@
-#include <stdio.h>
-#include <pthread.h>
+#include <stdio.h>       // standard input/output
+#include <pthread.h>     // posix threads library
 
-#define NUM_THREADS 16
-#define ITERATIONS  1000
+#define NUM_THREADS 16   // number of threads to create
+#define ITERATIONS  1000 // how many times each thread adds the value
 
-/* Shared global variable - no synchronization (race condition demo) */
-long global_value = 0;
-int user_value = 0;
+long global_value = 0;   // shared variable all threads will modify
+int user_value = 0;      // value entered by the user
 
-void *add_value(void *arg) {
-    for (int i = 0; i < ITERATIONS; i++) {
-        global_value += user_value;  /* Unsynchronized access - causes race condition */
+void *add_value(void *arg) {              // thread function
+    for (int i = 0; i < ITERATIONS; i++) { // loop 1000 times
+        global_value += user_value;         // add user value to shared variable (no protection)
     }
-    return NULL;
+    return NULL;                            // thread returns nothing
 }
 
 int main() {
-    pthread_t threads[NUM_THREADS];
+    pthread_t threads[NUM_THREADS];        // array to store thread ids
 
-    printf("Enter value to add: ");
-    scanf("%d", &user_value);
+    printf("Enter value to add: ");        // prompt user for input
+    scanf("%d", &user_value);              // read user input
 
-    /* Create 16 threads */
-    for (int i = 0; i < NUM_THREADS; i++) {
-        pthread_create(&threads[i], NULL, add_value, NULL);
+    for (int i = 0; i < NUM_THREADS; i++) {              // loop to create threads
+        pthread_create(&threads[i], NULL, add_value, NULL); // create each thread
     }
 
-    /* Wait for all threads to finish */
-    for (int i = 0; i < NUM_THREADS; i++) {
-        pthread_join(threads[i], NULL);
+    for (int i = 0; i < NUM_THREADS; i++) { // loop to wait for threads
+        pthread_join(threads[i], NULL);      // wait for each thread to finish
     }
 
-    printf("Current value is %ld\n", global_value);
-    return 0;
+    printf("Current value is %ld\n", global_value); // print final result
+    return 0;                                        // exit program
 }
