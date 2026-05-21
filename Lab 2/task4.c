@@ -1,73 +1,100 @@
-#include <stdio.h>    // standard input/output
-#include <stdlib.h>   // malloc and free
-#include <pthread.h>  // posix threads library
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
 
-#define NUM_THREADS        12      // number of threads for pi estimation
-#define SAMPLES_PER_THREAD 1000000 // random samples each thread generates
+#define NUM_THREADS 12
+#define SAMPLES_PER_THREAD 1000000
 
-double pi_estimates[NUM_THREADS];  // stores each thread's pi result
-int results_ready = 0;             // counts how many threads have finished
+double pi_estimates[NUM_THREADS];
+int results_ready = 0;
 
-pthread_mutex_t mutex;  // mutex to protect results_ready counter
-pthread_cond_t  cond;   // condition variable to signal main thread
+pthread_mutex_t mutex;
+pthread_cond_t cond;
 
-void *estimate_pi(void *arg) {
-    int id = *(int *)arg;   // get thread id from argument
-    free(arg);              // free the allocated id memory
+// Each thread estimates PI independently using Monte Carlo sampling
+void *estimate_pi(void *arg)
+{
+    int id = *(int *)arg;
+    free(arg);
 
-    unsigned int seed = id * 12345; // unique seed per thread for random numbers
-    long inside = 0;                // counts points that fall inside the circle
+    unsigned int seed = id * 12345;
+    long inside = 0;
 
-    for (long i = 0; i < SAMPLES_PER_THREAD; i++) { // loop through all samples
-        double x = (double)rand_r(&seed) / RAND_MAX; // random x between 0 and 1
-        double y = (double)rand_r(&seed) / RAND_MAX; // random y between 0 and 1
-        if (x * x + y * y <= 1.0)                    // check if point is inside circle
-            inside++;                                 // count the point
+    // Generate random points and count points inside the quarter circle
+    for (long i = 0; i < SAMPLES_PER_THREAD; i++)
+    {
+        double x = (double)rand_r(&seed) / RAND_MAX;
+        double y = (double)rand_r(&seed) / RAND_MAX;
+
+        if (x * x + y * y <= 1.0)
+        {
+            inside++;
+        }
     }
 
-    pi_estimates[id] = 4.0 * (double)inside / SAMPLES_PER_THREAD; // calculate pi estimate
-    printf("Thread %d estimated pi = %.10f\n", id, pi_estimates[id]); // print result
+    // Store this thread's PI estimation result
+    pi_estimates[id] = 4.0 * (double)inside / SAMPLES_PER_THREAD;
 
-    pthread_mutex_lock(&mutex);    // lock before updating shared counter
-    results_ready++;               // increment finished thread counter
-    pthread_cond_signal(&cond);    // wake up main thread to check progress
-    pthread_mutex_unlock(&mutex);  // unlock after update
+    printf("Thread %d estimated pi = %.10f\n", id, pi_estimates[id]);
 
-    return NULL;                   // thread done
+    // Notify the main thread that one more result is ready
+    pthread_mutex_lock(&mutex);
+
+    results_ready++;
+    pthread_cond_signal(&cond);
+
+    pthread_mutex_unlock(&mutex);
+
+    return NULL;
 }
 
-int main() {
-    pthread_t threads[NUM_THREADS]; // array to store thread ids
+int main()
+{
+    pthread_t threads[NUM_THREADS];
 
-    pthread_mutex_init(&mutex, NULL); // initialize mutex
-    pthread_cond_init(&cond, NULL);   // initialize condition variable
+    // Initialize synchronization tools
+    pthread_mutex_init(&mutex, NULL);
+    pthread_cond_init(&cond, NULL);
 
-    for (int i = 0; i < NUM_THREADS; i++) { // loop to create all threads
-        int *id = malloc(sizeof(int));       // allocate memory for thread id
-        *id = i;                             // set the thread id value
-        pthread_create(&threads[i], NULL, estimate_pi, id); // create thread
+    // Create worker threads for parallel PI estimation
+    for (int i = 0; i < NUM_THREADS; i++)
+    {
+        int *id = malloc(sizeof(int));
+        *id = i;
+
+        pthread_create(&threads[i], NULL, estimate_pi, id);
     }
 
-    pthread_mutex_lock(&mutex);                  // lock before checking condition
-    while (results_ready < NUM_THREADS) {        // loop until all threads are done
-        pthread_cond_wait(&cond, &mutex);         // wait for a signal from a thread
-    }
-    pthread_mutex_unlock(&mutex);                // unlock after all results are in
+    // Main thread waits until all worker threads report their results
+    pthread_mutex_lock(&mutex);
 
-    for (int i = 0; i < NUM_THREADS; i++) { // loop to join all threads
-        pthread_join(threads[i], NULL);      // wait for each thread to finish
+    while (results_ready < NUM_THREADS)
+    {
+        pthread_cond_wait(&cond, &mutex);
     }
 
-    double mean = 0.0;                       // variable to accumulate pi values
-    for (int i = 0; i < NUM_THREADS; i++) { // loop through all estimates
-        mean += pi_estimates[i];             // sum all pi estimates
+    pthread_mutex_unlock(&mutex);
+
+    // Join all threads after their work is completed
+    for (int i = 0; i < NUM_THREADS; i++)
+    {
+        pthread_join(threads[i], NULL);
     }
-    mean /= NUM_THREADS;                     // divide by thread count to get mean
 
-    printf("Mean value of pi = %.10f\n", mean); // print final mean pi value
+    double mean = 0.0;
 
-    pthread_mutex_destroy(&mutex); // clean up mutex
-    pthread_cond_destroy(&cond);   // clean up condition variable
+    // Calculate the final mean PI value from all thread estimates
+    for (int i = 0; i < NUM_THREADS; i++)
+    {
+        mean += pi_estimates[i];
+    }
 
-    return 0;                      // exit program
+    mean /= NUM_THREADS;
+
+    printf("Mean value of pi = %.10f\n", mean);
+
+    pthread_mutex_destroy(&mutex);
+    pthread_cond_destroy(&cond);
+
+    return 0;
 }
