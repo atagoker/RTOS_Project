@@ -2,58 +2,35 @@
 #include <unistd.h>
 
 #include <alchemy/task.h>
-#include <alchemy/mutex.h>
+#include <alchemy/timer.h>
 
-RT_TASK task1;
-RT_TASK task2;
+RT_TASK periodic_task;
 
-RT_MUTEX mutex;
-
-int counter = 0;
-
-void increment_task(void *arg)
+void task_function(void *arg)
 {
-    int i;
+    rt_task_set_periodic(NULL, TM_NOW, 1000000000);
 
-    for (i = 0; i < 100000; i++)
+    while (1)
     {
-        rt_mutex_acquire(&mutex, TM_INFINITE);
+        rt_task_wait_period(NULL);
 
-        counter++;
-
-        rt_mutex_release(&mutex);
+        printf("Periodic real-time task is running every 1 second\n");
     }
 }
 
 int main()
 {
-    rt_mutex_create(&mutex, "CounterMutex");
-
-    rt_task_create(&task1,
-                   "Task1",
+    rt_task_create(&periodic_task,
+                   "PeriodicTask",
                    0,
                    50,
                    0);
 
-    rt_task_create(&task2,
-                   "Task2",
-                   0,
-                   50,
-                   0);
-
-    rt_task_start(&task1,
-                  &increment_task,
+    rt_task_start(&periodic_task,
+                  &task_function,
                   NULL);
 
-    rt_task_start(&task2,
-                  &increment_task,
-                  NULL);
-
-    sleep(1);
-
-    printf("Final counter value: %d\n", counter);
-
-    rt_mutex_delete(&mutex);
+    pause();
 
     return 0;
 }
