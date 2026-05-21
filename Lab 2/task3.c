@@ -1,88 +1,127 @@
-#include <stdio.h>      // standard input/output
-#include <string.h>     // memset and string functions
-#include <pthread.h>    // posix threads library
-#include <semaphore.h>  // posix semaphores
+#include <stdio.h>
+#include <string.h>
+#include <pthread.h>
+#include <semaphore.h>
 
-#define BUFFER_SIZE 5   // maximum number of chars in the book at once
-#define TEXT_LEN    20  // total number of chars to write
+#define BUFFER_SIZE 5
+#define TEXT_LEN 20
 
-char book[BUFFER_SIZE];                        // shared buffer (the "book")
-char text_to_write[TEXT_LEN + 1] = "ABCDEFGHIJKLMNOPQRST"; // text the writer will write
+char book[BUFFER_SIZE];
+char text_to_write[TEXT_LEN + 1] = "ABCDEFGHIJKLMNOPQRST";
 
-int write_pos  = 0;   // current write position in the buffer
-int read_pos   = 0;   // current read position in the buffer
-int text_index = 0;   // index tracking how far into the text we've written
+int write_pos = 0;
+int read_pos = 0;
+int text_index = 0;
 
-sem_t empty_slots;   // counts how many free slots are in the buffer
-sem_t filled_slots;  // counts how many filled slots are in the buffer
-sem_t mutex;         // binary semaphore for mutual exclusion
+sem_t empty_slots;
+sem_t filled_slots;
+sem_t mutex;
 
-void print_book() {                          // helper to print buffer state
-    printf("Book: [");                       // opening bracket
-    for (int i = 0; i < BUFFER_SIZE; i++) { // loop through each slot
-        if (book[i] == '\0')                 // check if slot is empty
-            printf("_");                     // print underscore for empty slot
+// Helper function used only to display the current buffer state
+void print_book()
+{
+    printf("Book: [");
+
+    for (int i = 0; i < BUFFER_SIZE; i++)
+    {
+        if (book[i] == '\0')
+            printf("_");
         else
-            printf("%c", book[i]);           // print character if slot is filled
-        if (i < BUFFER_SIZE - 1) printf(" "); // space between slots
+            printf("%c", book[i]);
+
+        if (i < BUFFER_SIZE - 1)
+            printf(" ");
     }
-    printf("]\n");                           // closing bracket
+
+    printf("]\n");
 }
 
-void *writer(void *arg) {                        // writer thread function
-    while (text_index < TEXT_LEN) {              // loop until all chars are written
-        sem_wait(&empty_slots);                  // wait for a free slot
-        sem_wait(&mutex);                        // enter critical section
+void *writer(void *arg)
+{
+    while (text_index < TEXT_LEN)
+    {
+        // Writer waits until there is at least one empty page
+        sem_wait(&empty_slots);
 
-        char c = text_to_write[text_index++];   // get next char from text
-        book[write_pos] = c;                     // write char into buffer
-        printf("Writer wrote: %c at page %d\n", c, write_pos); // log the write
-        print_book();                            // show buffer state
-        write_pos = (write_pos + 1) % BUFFER_SIZE; // advance write position (circular)
+        // Only one thread can access the shared book at a time
+        sem_wait(&mutex);
 
-        sem_post(&mutex);                        // exit critical section
-        sem_post(&filled_slots);                 // signal that a slot is now filled
+        char c = text_to_write[text_index++];
+
+        book[write_pos] = c;
+
+        printf("Writer wrote: %c at page %d\n", c, write_pos);
+        print_book();
+
+        // Circular buffer logic
+        write_pos = (write_pos + 1) % BUFFER_SIZE;
+
+        sem_post(&mutex);
+
+        // Signal that one more page is filled
+        sem_post(&filled_slots);
     }
-    return NULL;                                 // writer thread done
+
+    return NULL;
 }
 
-void *reader(void *arg) {                        // reader thread function
-    int chars_read = 0;                          // count of chars read so far
-    while (chars_read < TEXT_LEN) {              // loop until all chars are read
-        sem_wait(&filled_slots);                 // wait for a filled slot
-        sem_wait(&mutex);                        // enter critical section
+void *reader(void *arg)
+{
+    int chars_read = 0;
 
-        char c = book[read_pos];                 // read char from buffer
-        printf("Reader read: %c from page %d\n", c, read_pos); // log the read
-        book[read_pos] = '\0';                   // clear the slot after reading
-        print_book();                            // show buffer state
-        read_pos = (read_pos + 1) % BUFFER_SIZE; // advance read position (circular)
-        chars_read++;                            // increment read counter
+    while (chars_read < TEXT_LEN)
+    {
+        // Reader waits until there is at least one written page
+        sem_wait(&filled_slots);
 
-        sem_post(&mutex);                        // exit critical section
-        sem_post(&empty_slots);                  // signal that a slot is now free
+        // Only one thread can access the shared book at a time
+        sem_wait(&mutex);
+
+        char c = book[read_pos];
+
+        printf("Reader read: %c from page %d\n", c, read_pos);
+
+        book[read_pos] = '\0';
+
+        print_book();
+
+        // Circular buffer logic
+        read_pos = (read_pos + 1) % BUFFER_SIZE;
+
+        chars_read++;
+
+        sem_post(&mutex);
+
+        // Signal that one more page became empty
+        sem_post(&empty_slots);
     }
-    return NULL;                                 // reader thread done
+
+    return NULL;
 }
 
-int main() {
-    pthread_t writer_thread, reader_thread;   // thread handles for writer and reader
+int main()
+{
+    pthread_t writer_thread, reader_thread;
 
-    memset(book, '\0', sizeof(book));         // initialize buffer with null chars
+    // Initialize the book as empty
+    memset(book, '\0', sizeof(book));
 
-    sem_init(&empty_slots,  0, BUFFER_SIZE);  // all slots start as empty
-    sem_init(&filled_slots, 0, 0);            // no slots filled at start
-    sem_init(&mutex,        0, 1);            // binary semaphore starts unlocked
+    // Counting semaphores control empty and filled pages
+    sem_init(&empty_slots, 0, BUFFER_SIZE);
+    sem_init(&filled_slots, 0, 0);
 
-    pthread_create(&writer_thread, NULL, writer, NULL); // start writer thread
-    pthread_create(&reader_thread, NULL, reader, NULL); // start reader thread
+    // Binary semaphore works like a mutex for the shared book
+    sem_init(&mutex, 0, 1);
 
-    pthread_join(writer_thread, NULL);        // wait for writer to finish
-    pthread_join(reader_thread, NULL);        // wait for reader to finish
+    pthread_create(&writer_thread, NULL, writer, NULL);
+    pthread_create(&reader_thread, NULL, reader, NULL);
 
-    sem_destroy(&empty_slots);                // clean up empty slots semaphore
-    sem_destroy(&filled_slots);               // clean up filled slots semaphore
-    sem_destroy(&mutex);                      // clean up mutex semaphore
+    pthread_join(writer_thread, NULL);
+    pthread_join(reader_thread, NULL);
 
-    return 0;                                 // exit program
+    sem_destroy(&empty_slots);
+    sem_destroy(&filled_slots);
+    sem_destroy(&mutex);
+
+    return 0;
 }
